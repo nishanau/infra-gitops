@@ -1,0 +1,103 @@
+# ------------------------------------------------------------
+# Deployment: cloudflared
+# Purpose:
+#   Maintain a persistent outbound tunnel connection
+#   from the cluster to Cloudflare's edge network.
+# ------------------------------------------------------------
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflared
+  labels:
+    app: cloudflared
+spec:
+  # Single replica is sufficient; Cloudflare edge provides HA.
+  replicas: 1
+
+  # Selector must match the labels in the pod template.
+  selector:
+    matchLabels:
+      app: cloudflared
+
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          imagePullPolicy: Always
+
+          # ----------------------------------------------------
+          # Arguments tell cloudflared which config file to use
+          # and to run in tunnel mode.
+          # ----------------------------------------------------
+          args:
+            - tunnel
+            - --config
+            - /etc/cloudflared/config/config.yaml
+            - run
+
+          # ----------------------------------------------------
+          # Environment variable provides the tunnel token.
+          # The token authorizes this instance to connect to
+          # your Cloudflare Zero Trust tunnel.
+          # ----------------------------------------------------
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-credentials
+                  key: tunnel-token
+
+          # ----------------------------------------------------
+          # Mount volumes for config and credentials.
+          # ----------------------------------------------------
+          volumeMounts:
+            - name: config
+              mountPath: /etc/cloudflared/config
+            - name: creds
+              mountPath: /etc/cloudflared/creds
+
+          # ----------------------------------------------------
+          # Health checks for self-healing.
+          # Cloudflared exposes a /ready endpoint on port 2000.
+          # ----------------------------------------------------
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+
+          # ----------------------------------------------------
+          # Resource requests and limits. Cloudflared is lightweight.
+          # ----------------------------------------------------
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+
+      # --------------------------------------------------------
+      # Volumes definition: one from ConfigMap, one from Secret.
+      # --------------------------------------------------------
+      volumes:
+        - name: config
+          configMap:
+            name: cloudflared-config
+        - name: creds
+          secret:
+            secretName: cloudflared-credentials
+
+      restartPolicy: Always
