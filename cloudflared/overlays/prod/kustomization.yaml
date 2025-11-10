@@ -1,4 +1,3 @@
 resources:
   - ../../base
-  - patch-secret.yaml
 namespace: cloudflared
