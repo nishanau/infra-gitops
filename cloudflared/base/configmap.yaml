@@ -27,9 +27,7 @@ data:
     ingress:
       - hostname: portfolio.nishdevops.org
         service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-      - hostname: crypto.nishdevops.org
-        service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
-      - hostname: cns.nishdevops.org
+      - hostname: portgolio-stage.nishdevops.org
         service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
 
       # Fallback route — returns 404 for unknown hostnames
