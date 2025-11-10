@@ -41,13 +41,14 @@ spec:
           # image immutability for CI/CD control.
           # ----------------------------------------------------
           args:
+            - cloudflared
             - tunnel
             - --no-autoupdate
-            - run
-            - --token
-            - $(TUNNEL_TOKEN)
+            - --loglevel
+            - debug
             - --metrics
             - 0.0.0.0:2000
+            - run
 
           # ----------------------------------------------------
           # Inject the Cloudflare-issued tunnel token
