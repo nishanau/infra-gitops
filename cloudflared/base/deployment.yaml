@@ -48,7 +48,6 @@ spec:
             - debug
             - --metrics
             - 0.0.0.0:2000
-            - run
 
           # ----------------------------------------------------
           # Inject the Cloudflare-issued tunnel token
