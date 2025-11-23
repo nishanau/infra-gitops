@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: argocd-repo-server
+  namespace: argocd
+spec:
+  template:
+    spec:
+      volumes:
+        - name: sops-age-key
+          secret:
+            secretName: sops-age-key   # will be created manually
+            optional: true             # important during bootstrap
+      containers:
+        - name: argocd-repo-server
+          volumeMounts:
+            - name: sops-age-key
+              mountPath: /home/argocd/.config/sops/age
+              readOnly: true
