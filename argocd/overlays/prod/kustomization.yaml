@@ -5,6 +5,8 @@ namespace: argocd
 
 resources:
   - ../../base
+  - external-secrets-app.yaml
+  - cloudflared-app.yaml
 
 patches:
   - path: repo-server-sops-patch.yaml

@@ -1,4 +1,5 @@
 resources:
   - configmap.yaml
   - deployment.yaml
-  - secrets-cloudflared.yaml
+  - secret-store.yaml
+  - external-secret.yaml
