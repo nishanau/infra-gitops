@@ -5,6 +5,7 @@ namespace: argocd
 
 resources:
   - ../../base
+  - infra-project.yaml
   - external-secrets-app.yaml
   - cloudflared-app.yaml
 
