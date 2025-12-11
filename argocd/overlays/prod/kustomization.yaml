@@ -9,6 +9,7 @@ resources:
   - apps/external-secrets-app.yaml
   - apps/cloudflared-app.yaml
   - apps/ingress-nginx-app.yaml
+  - apps/monitoring-app.yaml
 
 patches:
   - path: argocd-server-lb-patch.yaml

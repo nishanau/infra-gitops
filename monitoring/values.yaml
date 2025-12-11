@@ -1,0 +1,28 @@
+# Kube Prometheus Stack Values
+# Add custom values here to override defaults
+
+# Grafana configuration
+grafana:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.nishdevops.org
+    # Uncomment if you want TLS:
+    # tls:
+    #   - secretName: grafana-tls
+    #     hosts:
+    #       - grafana.nishdevops.org
+
+# Uncomment to configure Prometheus retention/storage:
+# prometheus:
+#   prometheusSpec:
+#     retention: 30d
+#     storageSpec:
+#       volumeClaimTemplate:
+#         spec:
+#           accessModes: ["ReadWriteOnce"]
+#           resources:
+#             requests:
+#               storage: 50Gi
+
