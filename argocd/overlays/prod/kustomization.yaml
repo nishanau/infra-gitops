@@ -6,8 +6,9 @@ namespace: argocd
 resources:
   - ../../base
   - infra-project.yaml
-  - external-secrets-app.yaml
-  - cloudflared-app.yaml
+  - ../../../external-secrets-operator/base/argocd-app.yaml
+  - ../../../cloudflared/base/argocd-app.yaml
+  - ../../../ingress-nginx/base/argocd-app.yaml
 
 patches:
   - path: argocd-server-lb-patch.yaml
