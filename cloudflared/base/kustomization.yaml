@@ -3,4 +3,3 @@ resources:
   - deployment.yaml
   - secret-store.yaml
   - external-secret.yaml
-  - argocd-app.yaml
