@@ -23,6 +23,8 @@ spec:
             name: nginx
             default: true
   syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
     automated:
       prune: true
       selfHeal: true
