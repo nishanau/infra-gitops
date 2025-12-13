@@ -53,27 +53,32 @@ This repository contains Kubernetes manifests and configurations managed via Git
 │       └── prod/              # Production overlay
 │           ├── infra-project.yaml              # AppProject definition
 │           ├── argocd-application.yaml         # ArgoCD self-management
-│           ├── external-secrets-app.yaml       # ESO apps
-│           ├── cloudflared-app.yaml            # Cloudflared app
 │           ├── argocd-server-lb-patch.yaml     # LoadBalancer patch
-│           ├── repo-server-sops-patch.yaml     # SOPS config (legacy)
-│           └── kustomization.yaml
+│           ├── kustomization.yaml
+│           └── apps/                           # Application definitions
+│               ├── external-secrets-app.yaml   # ESO apps
+│               ├── cloudflared-app.yaml        # Cloudflared app
+│               ├── ingress-nginx-app.yaml      # Ingress controller
+│               └── monitoring-app.yaml         # Monitoring stack
 │
 ├── external-secrets-operator/ # External Secrets Operator
-│   └── base/
+│   └── crds/                  # CRDs (renamed from base)
 │       ├── namespace.yaml     # ESO namespace
-│       └── kustomization.yaml # CRDs
+│       └── kustomization.yaml # CRDs bundle
 │
-└── cloudflared/               # Cloudflare Tunnel
-    ├── base/
-    │   ├── configmap.yaml     # Tunnel configuration
-    │   ├── deployment.yaml    # Cloudflared deployment
-    │   ├── secret-store.yaml  # Doppler connection config
-    │   ├── external-secret.yaml # Secret fetch definition
-    │   └── kustomization.yaml
-    └── overlays/
-        └── prod/
-            └── kustomization.yaml
+├── cloudflared/               # Cloudflare Tunnel
+│   ├── base/
+│   │   ├── configmap.yaml     # Tunnel configuration
+│   │   ├── deployment.yaml    # Cloudflared deployment
+│   │   ├── secret-store.yaml  # Doppler connection config
+│   │   ├── external-secret.yaml # Secret fetch definition
+│   │   └── kustomization.yaml
+│   └── overlays/
+│       └── prod/
+│           └── kustomization.yaml
+│
+└── monitoring/                # Monitoring stack configuration
+    └── values.yaml            # Custom Helm values for kube-prometheus-stack
 ```
 
 ## Applications
@@ -85,6 +90,8 @@ This repository contains Kubernetes manifests and configurations managed via Git
 | **argocd** | `argocd` | GitOps continuous delivery tool |
 | **external-secrets-crds** | `external-secrets` | ESO Custom Resource Definitions |
 | **external-secrets-operator** | `external-secrets` | ESO controller for secret management |
+| **ingress-nginx** | `ingress-nginx` | NGINX Ingress Controller for HTTP/HTTPS routing |
+| **monitoring** | `monitoring` | kube-prometheus-stack (Prometheus, Grafana, Alertmanager) |
 
 ### Services
 

@@ -1426,22 +1426,29 @@ infra-gitops/
 ├── argocd/
 │   └── overlays/prod/
 │       ├── infra-project.yaml         # AppProject for infrastructure apps
-│       ├── external-secrets-app.yaml  # ESO CRDs + Operator
-│       ├── cloudflared-app.yaml       # Cloudflared app
-│       └── kustomization.yaml
+│       ├── kustomization.yaml
+│       └── apps/                      # Application definitions
+│           ├── external-secrets-app.yaml  # ESO CRDs + Operator
+│           ├── cloudflared-app.yaml       # Cloudflared app
+│           ├── ingress-nginx-app.yaml     # Ingress controller
+│           └── monitoring-app.yaml        # Monitoring stack
 │
 ├── external-secrets-operator/
-│   └── base/
+│   └── crds/                          # Renamed from base
 │       ├── namespace.yaml
 │       └── kustomization.yaml         # Includes CRDs bundle
 │
-└── cloudflared/
-    ├── base/
-    │   ├── deployment.yaml
-    │   ├── secret-store.yaml          # Doppler connection
-    │   ├── external-secret.yaml       # Secret definition
-    │   └── kustomization.yaml
-    └── overlays/prod/
+├── cloudflared/
+│   ├── base/
+│   │   ├── deployment.yaml
+│   │   ├── configmap.yaml
+│   │   ├── secret-store.yaml          # Doppler connection
+│   │   ├── external-secret.yaml       # Secret definition
+│   │   └── kustomization.yaml
+│   └── overlays/prod/
+│
+└── monitoring/                        # New: Monitoring stack values
+    └── values.yaml                    # Custom Helm values
 ```
 
 **Why separate repository?**
@@ -1479,7 +1486,7 @@ spec:
 
 #### **Step 4: ESO CRDs and Operator Apps**
 
-**infra-gitops/argocd/overlays/prod/external-secrets-app.yaml:**
+**infra-gitops/argocd/overlays/prod/apps/external-secrets-app.yaml:**
 ```yaml
 ---
 # App 1: CRDs (never pruned)
@@ -1493,7 +1500,7 @@ spec:
   source:
     repoURL: https://github.com/nishanau/infra-gitops
     targetRevision: HEAD
-    path: external-secrets-operator/base
+    path: external-secrets-operator/crds  # Updated path
   destination:
     server: https://kubernetes.default.svc
     namespace: external-secrets
@@ -1677,12 +1684,14 @@ I use **Cloudflare Tunnel** to securely expose cluster services to the internet 
 ```
 cloudflared/
 ├── base/
-│   ├── deployment.yaml
-│   ├── secret-store.yaml
-│   ├── external-secret.yaml
+│   ├── configmap.yaml           # Tunnel routing configuration
+│   ├── deployment.yaml          # Cloudflared connector
+│   ├── secret-store.yaml        # Doppler connection
+│   ├── external-secret.yaml     # Tunnel token from Doppler
 │   └── kustomization.yaml
 └── overlays/
     └── prod/
+        └── kustomization.yaml
 ```
 
 ### infra-gitops/cloudflared/base/deployment.yaml
@@ -1887,5 +1896,387 @@ spec:
 
 ---
 
+## 11. Ingress Controller (ingress-nginx)
+
+The **NGINX Ingress Controller** manages external access to services in the cluster via HTTP/HTTPS routes. It acts as a reverse proxy and load balancer. Initially I had deployed it manually. But, as Im following GitOps aligned approach, each and very infra component must be versioned
+
+
+**Architecture:**
+```
+Internet → Cloudflare Tunnel → ingress-nginx → Services → Pods
+```
+
+### Installation via ArgoCD
+
+**File:** `argocd/overlays/prod/apps/ingress-nginx-app.yaml`
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ingress-nginx
+  namespace: argocd
+spec:
+  destination:
+    namespace: ingress-nginx
+    server: https://kubernetes.default.svc
+  project: infra
+  source:
+    repoURL: https://kubernetes.github.io/ingress-nginx
+    chart: ingress-nginx
+    targetRevision: 4.10.0
+    helm:
+      values: |
+        controller:
+          metrics:
+            enabled: true
+            serviceMonitor:
+              enabled: true
+          ingressClassResource:
+            name: nginx
+            default: true
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+**Key Configuration:**
+- **Default IngressClass:** All Ingress resources without explicit `ingressClassName` use nginx
+- **Metrics enabled:** Exposes Prometheus metrics on `/metrics`
+- **ServiceMonitor:** Automatically discovered by Prometheus Operator
+
+### Example Ingress Resource
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: grafana-ingress
+  namespace: monitoring
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: grafana.nishdevops.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: monitoring-grafana
+                port:
+                  number: 80
+```
+
+**How it works:**
+1. Cloudflare Tunnel forwards traffic to `ingress-nginx-controller` service
+2. Ingress controller reads Ingress resources
+3. Routes traffic based on host/path rules to backend services
+4. Services forward to pods
+
+### Verification
+
+```bash
+# Check ingress-nginx pods
+kubectl get pods -n ingress-nginx
+
+# Check ingress controller service
+kubectl get svc -n ingress-nginx
+
+# List all ingress resources
+kubectl get ingress -A
+
+# Check ingress-nginx logs
+kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller
+```
+
+---
+
+## 12. Monitoring Stack (kube-prometheus-stack)
+
+The **kube-prometheus-stack** provides comprehensive monitoring for Kubernetes clusters using Prometheus, Grafana, and Alertmanager.
+
+### Components
+
+| Component | Purpose | Access |
+|-----------|---------|--------|
+| **Prometheus** | Metrics collection and storage | Internal |
+| **Grafana** | Visualization dashboards | `grafana.nishdevops.org` |
+| **Alertmanager** | Alert routing and management | Internal |
+| **Node Exporter** | Host metrics (CPU, memory, disk) | - |
+| **kube-state-metrics** | Kubernetes object metrics | - |
+| **Prometheus Operator** | Manages Prometheus instances | - |
+
+### Why kube-prometheus-stack?
+
+**Observability:**
+- ✅ Cluster-wide metrics collection
+- ✅ Pre-built dashboards for Kubernetes
+- ✅ AlertManager for notifications
+- ✅ ServiceMonitor CRDs for automatic service discovery
+- ✅ Long-term metrics storage
+
+**Metrics Collected:**
+- Node metrics (CPU, memory, disk, network)
+- Pod metrics (resource usage, restarts)
+- Container metrics (CPU, memory limits/requests)
+- Kubernetes API metrics
+- Custom application metrics
+
+### Installation via ArgoCD
+
+**File:** `argocd/overlays/prod/apps/monitoring-app.yaml`
+
+```yaml
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: infra
+  source:
+    repoURL: https://prometheus-community.github.io/helm-charts
+    chart: kube-prometheus-stack
+    targetRevision: 79.12.0
+    helm:
+      releaseName: monitoring
+      valueFiles:
+        - https://raw.githubusercontent.com/nishanau/infra-gitops/main/monitoring/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: admissionregistration.k8s.io
+      kind: MutatingWebhookConfiguration
+      jqPathExpressions:
+        - '.webhooks[]?.clientConfig.caBundle'
+```
+
+**Key Configuration:**
+- **valueFiles:** Custom values from Git repository
+- **ServerSideApply:** Required for CRD management
+- **ignoreDifferences:** Prevents sync conflicts with webhook CA bundles
+
+### Custom Values Configuration
+
+**File:** `monitoring/values.yaml`
+
+```yaml
+# Kube Prometheus Stack Values
+# Add custom values here to override defaults
+
+# Grafana configuration
+grafana:
+  ingress:
+    enabled: true
+    ingressClassName: nginx
+    hosts:
+      - grafana.nishdevops.org
+    # Uncomment if you want TLS:
+    # tls:
+    #   - secretName: grafana-tls
+    #     hosts:
+    #       - grafana.nishdevops.org
+
+# Uncomment to configure Prometheus retention/storage:
+# prometheus:
+#   prometheusSpec:
+#     retention: 30d
+#     storageSpec:
+#       volumeClaimTemplate:
+#         spec:
+#           accessModes: ["ReadWriteOnce"]
+#           resources:
+#             requests:
+#               storage: 50Gi
+```
+
+**What this enables:**
+- Grafana accessible via `grafana.nishdevops.org` through ingress-nginx
+- Default retention: 15 days (can be extended with storage config)
+- Pre-configured dashboards for Kubernetes monitoring
+
+### Accessing Grafana
+
+**Default Credentials:**
+```bash
+# Username: admin
+# Get password:
+kubectl get secret -n monitoring monitoring-grafana -o jsonpath="{.data.admin-password}" | base64 -d && echo
+```
+
+**Via Browser:**
+1. Navigate to `https://grafana.nishdevops.org`
+2. Login with admin credentials
+3. Explore pre-built dashboards:
+   - **Kubernetes / Compute Resources / Cluster** - Overall cluster metrics
+   - **Kubernetes / Compute Resources / Namespace (Pods)** - Per-namespace view
+   - **Node Exporter / Nodes** - Host-level metrics
+
+### Key Dashboards
+
+| Dashboard | Purpose | Key Metrics |
+|-----------|---------|-------------|
+| **Cluster Overview** | Overall cluster health | CPU/Memory usage, Pod count |
+| **Node Metrics** | Individual node performance | CPU, Memory, Disk, Network |
+| **Pod Metrics** | Per-pod resource usage | CPU/Memory requests/limits |
+| **Namespace Resources** | Namespace-level view | Resource quotas, pod count |
+| **Ingress NGINX** | Ingress controller stats | Request rate, latency, errors |
+
+### ServiceMonitor for Custom Apps
+
+To add Prometheus monitoring to your application:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app
+  labels:
+    app: my-app
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+spec:
+  ports:
+    - port: 8080
+      name: metrics
+  selector:
+    app: my-app
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: my-app
+  labels:
+    release: monitoring  # Must match Prometheus label selector
+spec:
+  selector:
+    matchLabels:
+      app: my-app
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+```
+
+### Verification
+
+```bash
+# Check all monitoring pods
+kubectl get pods -n monitoring
+
+# Check Prometheus targets (should show all ServiceMonitors)
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+# Visit http://localhost:9090/targets
+
+# Check Grafana service
+kubectl get svc -n monitoring monitoring-grafana
+
+# Check ingress for Grafana
+kubectl get ingress -n monitoring
+
+# View Prometheus logs
+kubectl logs -n monitoring -l app.kubernetes.io/name=prometheus
+```
+
+### Troubleshooting
+
+**Grafana not accessible:**
+```bash
+# Check ingress
+kubectl describe ingress -n monitoring
+
+# Check ingress-nginx logs
+kubectl logs -n ingress-nginx -l app.kubernetes.io/component=controller
+
+# Check Grafana pod
+kubectl logs -n monitoring -l app.kubernetes.io/name=grafana
+```
+
+**Prometheus not scraping metrics:**
+```bash
+# Check ServiceMonitor
+kubectl get servicemonitor -n <namespace>
+
+# Check if Prometheus can reach the target
+kubectl exec -n monitoring monitoring-kube-prometheus-prometheus-0 -- wget -O- http://<service>.<namespace>:8080/metrics
+```
+
+**High memory usage:**
+```bash
+# Check Prometheus retention settings
+kubectl get prometheus -n monitoring -o yaml | grep retention
+
+# Reduce retention or add storage
+# Edit values.yaml and update via Git
+```
+
+---
+
+## 13. Updated Repository Structure
+
+```
+infra-gitops/
+├── argocd/
+│   ├── base/
+│   │   ├── install.yaml
+│   │   └── kustomization.yaml
+│   └── overlays/
+│       └── prod/
+│           ├── argocd-application.yaml
+│           ├── argocd-server-lb-patch.yaml
+│           ├── infra-project.yaml
+│           ├── kustomization.yaml
+│           └── apps/                          # ← Application definitions
+│               ├── cloudflared-app.yaml
+│               ├── external-secrets-app.yaml
+│               ├── ingress-nginx-app.yaml    # ← New
+│               └── monitoring-app.yaml        # ← New
+│
+├── external-secrets-operator/
+│   └── crds/                                  # ← Renamed from base
+│       ├── namespace.yaml
+│       └── kustomization.yaml
+│
+├── cloudflared/
+│   ├── base/
+│   │   ├── configmap.yaml
+│   │   ├── deployment.yaml
+│   │   ├── external-secret.yaml
+│   │   ├── secret-store.yaml
+│   │   └── kustomization.yaml
+│   └── overlays/
+│       └── prod/
+│           └── kustomization.yaml
+│
+├── monitoring/                                # ← New
+│   └── values.yaml                            # ← Custom Helm values
+│
+├── README.md
+└── technical_guide_and_learning_logs.md
+```
+
+**Key Changes:**
+- ArgoCD Application manifests moved to `argocd/overlays/prod/apps/`
+- External Secrets Operator directory renamed to `crds/`
+- Added `monitoring/` directory for kube-prometheus-stack values
+- Added `ingress-nginx-app.yaml` for ingress controller
+- Added `monitoring-app.yaml` for observability stack
+
+---
+
 **Outcome:**
-A reproducible, security-conscious, and automation-ready Kubernetes deployment pipeline aligning with industry standards.
+A reproducible, security-conscious, and automation-ready Kubernetes deployment pipeline aligning with industry standards, with comprehensive monitoring and secure ingress management.
