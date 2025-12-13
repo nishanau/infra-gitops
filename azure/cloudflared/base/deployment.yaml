@@ -1,0 +1,112 @@
+# ============================================================
+# Deployment: cloudflared
+# Purpose:
+#   Runs a Cloudflare Tunnel connector inside the cluster.
+#   Establishes a secure outbound-only connection to Cloudflare’s edge,
+#   eliminating the need for public ingress or exposed ports.
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cloudflared
+  namespace: cloudflared
+  labels:
+    app: cloudflared
+
+spec:
+  # ------------------------------------------------------------
+  # Only one replica is required; Cloudflare handles HA on its end.
+  # You can scale to multiple replicas for redundancy if desired.
+  # ------------------------------------------------------------
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: cloudflared
+
+  template:
+    metadata:
+      labels:
+        app: cloudflared
+
+    spec:
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:latest
+          imagePullPolicy: Always
+
+          # ----------------------------------------------------
+          # Run the connector in token-based mode.
+          # "--no-autoupdate" prevents background updates, keeping
+          # image immutability for CI/CD control.
+          # ----------------------------------------------------
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --metrics
+            - 0.0.0.0:2000
+            - --loglevel
+            - info
+            - run
+            - --token
+            - $(TUNNEL_TOKEN)
+
+          # ----------------------------------------------------
+          # Inject the Cloudflare-issued tunnel token
+          # securely from Kubernetes Secret.
+          # ----------------------------------------------------
+          env:
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: cloudflared-credentials   # must exist in same namespace
+                  key: tunnel-token               # token field name inside secret
+
+          # ----------------------------------------------------
+          # Health checks for self-healing and readiness signaling.
+          # Cloudflared exposes a /ready endpoint on port 2000.
+          # ----------------------------------------------------
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+          # ----------------------------------------------------
+          # Resource allocation:
+          #   Requests ensure minimal guaranteed CPU/memory.
+          #   Limits prevent runaway resource consumption.
+          # Cloudflared is lightweight and stable within these bounds.
+          # ----------------------------------------------------
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+
+          # ----------------------------------------------------
+          # Optionally expose /metrics (port 2000) for Prometheus.
+          # This line is harmless even if Prometheus is absent.
+          # ----------------------------------------------------
+          ports:
+            - containerPort: 2000
+              name: metrics
+
+      # --------------------------------------------------------
+      # Restart policy: always keep the tunnel alive.
+      # --------------------------------------------------------
+      restartPolicy: Always

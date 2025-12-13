@@ -1,0 +1,34 @@
+# ------------------------------------------------------------
+# ConfigMap: cloudflared-config
+# Purpose:
+#   Holds the tunnel routing configuration for all apps.
+#   Each hostname entry maps a public domain to the internal
+#   Kubernetes service (typically the ingress controller).
+# ------------------------------------------------------------
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cloudflared-config
+  namespace: cloudflared
+data:
+  # File name inside container (cloudflared expects config.yaml)
+  config.yaml: |
+    # Unique identifier for the tunnel (shown in Cloudflare dashboard)
+    tunnel: shared-tunnel
+
+    # Path where credentials will be mounted in the container
+    credentials-file: /etc/cloudflared/creds/credentials.json
+
+    # --------------------------------------------------------
+    # Ingress rules — top to bottom evaluation order.
+    # Each rule defines a Cloudflare hostname and the local
+    # service that receives that traffic.
+    # --------------------------------------------------------
+    ingress:
+      - hostname: portfolio.nishdevops.org
+        service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+      - hostname: portgolio-stage.nishdevops.org
+        service: http://ingress-nginx-controller.ingress-nginx.svc.cluster.local:80
+
+      # Fallback route — returns 404 for unknown hostnames
+      - service: http_status:404
