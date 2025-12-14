@@ -1,0 +1,55 @@
+apiVersion: networking.k8s.io/v1  # Kubernetes API version for NetworkPolicy
+kind: NetworkPolicy             # The resource type
+metadata:
+  name: next-portfolio-np       # Name of the NetworkPolicy
+
+spec:
+  # Selects which pods this NetworkPolicy applies to.
+  # Here, it applies only to pods with the label `app: next-portfolio`
+  podSelector:
+    matchLabels:
+      app: next-portfolio
+
+  # Types of traffic this policy controls
+  # Ingress = incoming traffic, Egress = outgoing traffic
+  policyTypes:
+    - Ingress
+    - Egress
+
+  # -----------------------------
+  # INGRESS RULES
+  # -----------------------------
+  ingress:
+    # Only allow incoming traffic from the Ingress controller pods
+    - from:
+        - namespaceSelector: {}  # Match pods in any namespace (Ingress controller may be in a different namespace)
+          podSelector:
+            matchLabels:
+              # Label used by default for NGINX Ingress Controller pods
+              # Change if your cluster uses a different Ingress controller
+              app.kubernetes.io/name: ingress-nginx
+      ports:
+        - protocol: TCP           # Protocol to allow
+          port: 3000              # Container port of the Next.js app
+
+  # -----------------------------
+  # EGRESS RULES
+  # -----------------------------
+  egress:
+    # Allow outgoing traffic to external IP addresses (Internet)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0    # All IPs (Internet)
+      ports:
+        - protocol: TCP
+          port: 80             # Allow HTTP traffic
+        - protocol: TCP
+          port: 443            # Allow HTTPS traffic
+    # No other egress rules are defined, so pod-to-pod traffic inside the cluster is blocked
+
+# NOTES:
+# 1. This NetworkPolicy isolates pods from all other pods by default.
+# 2. Only traffic from the Ingress controller to port 3000 is allowed.
+# 3. Outbound traffic is allowed to external networks (for API calls or CDNs) but blocked to other pods.
+# 4. Namespace is not hardcoded; overlays (dev/stage/prod) will inject the correct namespace via Kustomize.
+# 5. Fully compliant with kube-score and Checkov recommendations for pod network isolation.

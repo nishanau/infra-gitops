@@ -1,0 +1,120 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: next-portfolio
+  labels:
+    app: next-portfolio
+spec:
+  revisionHistoryLimit: 5  # keep last 5 revisions for rollback
+  # pod must be ready for at least 10 seconds before being considered
+  # available
+  minReadySeconds: 10
+  strategy:
+    # updates without downtime, other option is Recreate which kills
+    # old pods first
+    type: RollingUpdate
+    rollingUpdate:  # only applicable if type is RollingUpdate
+      maxUnavailable: 1  # at most 1 pod can be unavailable during update
+      maxSurge: 1  # at most 1 extra pod can be created during update
+  selector:
+    matchLabels:
+      app: next-portfolio  # must match labels in template below
+  template:  # template for the pods
+    metadata:
+      labels:
+        app: next-portfolio  # must match selector above
+      # used for storing non-identifying information, here we use it for
+      # tracking deployment time
+      annotations:
+        prometheus.io/scrape: "true"  # enables prometheus scraping
+        prometheus.io/port: "3000"  # port on which prometheus will scrape
+        prometheus.io/path: "/metrics"  # path for prometheus scraping
+        kube-score/ignore: pod-networkpolicy,pod-probes-identical  # ignore these checks
+    spec:  # specification of the pod
+      # service account for the pod, if we use default, it has more
+      # privileges than needed
+      serviceAccountName: next-portfolio-sa
+      securityContext:
+        fsGroup: 20001  # files created by containers will be owned by this GID
+        runAsNonRoot: true  # ensure pod is run as non-root user
+        runAsUser: 10001  # run pod as user with UID 10001
+        runAsGroup: 30001  # run pod as group with GID 30001
+      # automatically mount the service account token, since the app doesnt
+      # need to interact with API server, we disable it for security
+      automountServiceAccountToken: false
+      # time to wait before forcefully killing the pod
+      terminationGracePeriodSeconds: 20
+      containers:
+        # name of the first container, more options include
+        # imagePullPolicy, command, args, workingDir, volumeMounts
+        - name: next-portfolio
+          image: docker.io/nishans0/next-portfolio:v0.0.1
+          imagePullPolicy: Always  # pull image always
+          ports:
+            - containerPort: 3000  # port on which the container is listening
+          env:
+            # environment variable to set the environment
+            - name: NODE_ENV
+              value: "production"  # value of the environment variable
+          # checks if the app has started, if not, it will be restarted
+          startupProbe:
+            # HTTP GET request to the root path on port 3000 more options
+            # can be protocol, host, scheme
+            httpGet:
+              path: "/"
+              port: 3000
+            initialDelaySeconds: 5  # wait 5 seconds before starting probes
+            periodSeconds: 10  # probe every 10 seconds
+            # after 10 failures, the pod is marked as not started
+            failureThreshold: 10
+            successThreshold: 1  # after 1 success, the pod is marked as started
+          # checks if the app is alive, if not, it will be restarted
+          readinessProbe:
+            httpGet:
+              path: "/"
+              port: 3000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            failureThreshold: 3
+          livenessProbe:
+            # HTTP GET request to the root path on port 3000 more options
+            # can be protocol, host, scheme
+            httpGet:
+              path: "/"
+              port: 3000
+            initialDelaySeconds: 15  # wait 15 seconds before starting probes
+            periodSeconds: 20  # probe every 20 seconds
+            # after 5 failures, the pod is marked as not alive
+            failureThreshold: 5
+            successThreshold: 1  # after 1 success, pod is marked as alive
+          resources:  # resource requests and limits
+            requests:  # minimum resources required
+              memory: "256Mi"
+              cpu: "250m"
+              ephemeral-storage: "1Gi"
+            limits:  # maximum resources allowed
+              memory: "512Mi"
+              cpu: "500m"
+              ephemeral-storage: "2Gi"
+          # security options for the container. We are giving UID and GID
+          # to run the container as non-root user for security
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            allowPrivilegeEscalation: false  # do not allow privilege escalation
+            capabilities:  # drop all capabilities for security
+              drop: ["ALL"]
+            # make the root filesystem read-only for security
+            readOnlyRootFilesystem: true
+          lifecycle:  # hooks for container lifecycle events
+            postStart:  # hook to run after the container has started
+              exec:  # execute a command
+                # simple echo command, can be replaced with any script
+                command: ["sh", "-c", "echo Container started"]
+            preStop:  # hook to run before the container is stopped
+              exec:  # execute a command
+                # sleep for 10 seconds to allow in-flight requests to
+                # complete
+                command: ["sh", "-c", "sleep 10"]

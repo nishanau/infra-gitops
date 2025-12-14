@@ -1,17 +1,17 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: portfolio-dev-app
-  namespace: dev
+  name: portfolio-stage-app
+  namespace: stage
 spec:
   project: portfolio-apps
   source:
-    repoURL: https://github.com/nishanau/NextJSPortfolioSite.git
-    path: manifests/overlays/dev
-    targetRevision: dev
+    repoURL: https://github.com/nishanau/infra-gitops.git
+    path: azure/business-apps/next-portfolio/manifests/overlays/stage
+    targetRevision: stage
   destination:
     server: https://kubernetes.default.svc
-    namespace: dev
+    namespace: stage
   syncPolicy:
     automated:
       prune: true

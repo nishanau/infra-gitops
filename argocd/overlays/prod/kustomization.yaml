@@ -5,7 +5,8 @@ namespace: argocd
 
 resources:
   - ../../base
-  - infra-project.yaml
+  - argocd-projects/infra-project.yaml
+  - argocd-projects/portfolio-apps-project.yaml
   - apps/infra-apps/external-secrets-app.yaml
   - apps/infra-apps/cloudflared-app.yaml
   - apps/infra-apps/ingress-nginx-app.yaml
@@ -14,10 +15,3 @@ resources:
   - apps/next-portfolio/stage-app.yaml
   - apps/next-portfolio/dev-app.yaml
 
-patches:
-  - path: argocd-server-lb-patch.yaml
-    target:
-      group: v1
-      version: v1
-      kind: Service
-      name: argocd-server

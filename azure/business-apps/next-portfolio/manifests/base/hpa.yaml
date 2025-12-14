@@ -1,0 +1,59 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: next-portfolio-hpa     # HPA name (should match the workload being scaled)
+spec:
+  # -------------------------------------------------------------------
+  # scaleTargetRef: Which Kubernetes workload should this HPA scale?
+  # It must point to a Deployment, ReplicaSet, or StatefulSet.
+  # -------------------------------------------------------------------
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: next-portfolio   # Name of the Deployment to scale
+
+  # -------------------------------------------------------------------
+  # minReplicas: Minimum number of pods that must always be running.
+  # Useful to keep enough pods warm for quick response times.
+  # -------------------------------------------------------------------
+  minReplicas: 2
+
+  # -------------------------------------------------------------------
+  # maxReplicas: Maximum number of pods HPA is allowed to scale up to.
+  # Should be aligned with cluster capacity & node autoscaling.
+  # -------------------------------------------------------------------
+  maxReplicas: 5
+
+  # -------------------------------------------------------------------
+  # metrics: The metrics used by HPA to decide scaling.
+  # Most common: CPU utilization (percentage of CPU requests).
+  # Requires resource requests on containers.
+  #
+  # You can add multiple metrics (CPU, memory, custom metrics, etc.)
+  # -------------------------------------------------------------------
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu                   # CPU-based autoscaling
+        target:
+          type: Utilization
+          averageUtilization: 80    # Target: keep average CPU at ~80%
+
+  # -------------------------------------------------------------------
+  # behavior (Optional but recommended)
+  # Controls how fast the HPA can scale up or down.
+  # Helps avoid aggressive scaling or flapping.
+  # -------------------------------------------------------------------
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0   # No delay before scaling up
+      policies:
+        - type: Percent
+          value: 100                  # Can double replicas in one step
+          periodSeconds: 15           # Decision window
+    scaleDown:
+      stabilizationWindowSeconds: 60  # Avoid fast scale-downs (prevents churn)
+      policies:
+        - type: Percent
+          value: 50                   # Can reduce replicas by 50% at a time
+          periodSeconds: 15

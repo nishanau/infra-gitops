@@ -1,0 +1,11 @@
+---
+namespace: dev
+resources:
+  - ../../base
+  - ingress.yaml
+nameSuffix: -dev
+images:
+  - name: docker.io/nishans0/next-portfolio
+    newTag: sha-a29b9a325adfc09e4f170192c4cee12b32f34d87
+patches:
+  - path: hpa-patch.yaml

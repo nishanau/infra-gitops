@@ -1,23 +1,24 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: portfolio-prod-app
-  namespace: prod
+  name: portfolio-dev-app
+  namespace: dev
 spec:
   project: portfolio-apps
   source:
-    repoURL: https://github.com/nishanau/NextJSPortfolioSite.git
-    path: manifests/overlays/prod
-    targetRevision: HEAD
+    repoURL: https://github.com/nishanau/infra-gitops.git
+    path: azure/business-apps/next-portfolio/manifests/overlays/dev
+    targetRevision: dev
   destination:
     server: https://kubernetes.default.svc
-    namespace: prod
+    namespace: dev
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
       enabled: true
     syncOptions:
+      - ApplyOutOfSyncOnly=true
       - CreateNamespace=true
     retry:
       limit: 2
