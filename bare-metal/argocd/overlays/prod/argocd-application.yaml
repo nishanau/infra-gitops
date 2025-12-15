@@ -7,7 +7,7 @@ spec:
   project: infra
   source:
     repoURL: https://github.com/nishanau/infra-gitops.git
-    path: argocd/overlays/prod
+    path: bare-metal/argocd/overlays/prod
     targetRevision: main
   destination:
     server: https://kubernetes.default.svc

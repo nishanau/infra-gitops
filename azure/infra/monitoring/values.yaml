@@ -7,12 +7,12 @@ grafana:
     enabled: true
     ingressClassName: nginx
     hosts:
-      - grafana.nishdevops.org
+      - grafana-az.nishdevops.org
     # Uncomment if you want TLS:
     # tls:
     #   - secretName: grafana-tls
     #     hosts:
-    #       - grafana.nishdevops.org
+    #       - grafana-az.nishdevops.org
 
 # Uncomment to configure Prometheus retention/storage:
 # prometheus:
